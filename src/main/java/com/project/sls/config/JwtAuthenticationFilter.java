@@ -53,7 +53,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             email = jwtService.extractEmail(token);
         } catch (Exception e) {
-            // invalid token -> treat as not authenticated
             filterChain.doFilter(request, response);
             return;
         }
