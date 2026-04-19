@@ -1,10 +1,18 @@
 package com.project.sls.controller;
 
 import com.project.sls.dto.courier.CourierDto;
+import com.project.sls.dto.courier.CreateCourierRequestDto;
 import com.project.sls.entity.Courier;
+import com.project.sls.entity.Delivery;
+import com.project.sls.entity.User;
 import com.project.sls.repository.CourierRepository;
+import com.project.sls.repository.DeliveryRepository;
+import com.project.sls.repository.UserRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -13,27 +21,33 @@ import java.util.List;
 public class CourierController {
 
     private final CourierRepository courierRepository;
+    private final UserRepository userRepository;
+    private final DeliveryRepository deliveryRepository;
 
-    public CourierController(CourierRepository courierRepository) {
+    public CourierController(CourierRepository courierRepository, UserRepository userRepository, DeliveryRepository deliveryRepository) {
         this.courierRepository = courierRepository;
+        this.userRepository = userRepository;
+        this.deliveryRepository = deliveryRepository;
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','COURIER')")
     @GetMapping
     public List<CourierDto> getAll() {
         return courierRepository.findAll().stream()
-                .map(CourierController::toDto)
+                .map(this::toDto)
                 .toList();
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','COURIER')")
     @GetMapping("/{id}")
     public ResponseEntity<CourierDto> getById(@PathVariable Integer id) {
         return courierRepository.findById(id)
-                .map(CourierController::toDto)
+                .map(this::toDto)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    private static CourierDto toDto(Courier c) {
+    private CourierDto toDto(Courier c) {
         Integer userId = null;
         String name = null;
         String email = null;
@@ -44,8 +58,9 @@ public class CourierController {
             email = c.getUser().getEmail();
         }
 
-        long activeDeliveries = 0; // TODO implement
-        long totalDelivered = 0;   // TODO implement
+        long activeDeliveries = deliveryRepository.countByCourierAndStatus(c, Delivery.Status.ASSIGNED)
+                + deliveryRepository.countByCourierAndStatus(c, Delivery.Status.IN_TRANSIT);
+        long totalDelivered   = deliveryRepository.countByCourierAndStatus(c, Delivery.Status.DELIVERED);
 
         return new CourierDto(
                 c.getId(),
@@ -60,5 +75,31 @@ public class CourierController {
                 activeDeliveries,
                 totalDelivered
         );
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public CourierDto create(@RequestBody CreateCourierRequestDto request) {
+        if (request.userId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
+        }
+        User user = userRepository.findById(request.userId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (courierRepository.findByUserId(request.userId()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Courier already exists for this user");
+        }
+
+        Courier courier = Courier.builder()
+                .user(user)
+                .vehicleType(request.vehicleType())
+                .licensePlate(request.licensePlate())
+                .phone(request.phone())
+                .maxWeightKg(request.maxWeightKg())
+                .isActive(true)
+                .build();
+
+        return toDto(courierRepository.save(courier));
     }
 }

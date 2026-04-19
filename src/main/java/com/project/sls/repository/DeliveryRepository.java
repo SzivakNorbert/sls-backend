@@ -14,6 +14,8 @@ import java.util.Optional;
 @Repository
 public interface DeliveryRepository extends JpaRepository<Delivery, Integer> {
 
+    long countByCourierIdAndStatus(Integer courierId, Delivery.Status status);
+
     // Egy csomag aktuális kézbesítési rekordja
     Optional<Delivery> findByPkg(Package pkg);
 

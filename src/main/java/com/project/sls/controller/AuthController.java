@@ -39,7 +39,16 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
+        // after token generation:
         String token = jwtService.generateToken(user);
-        return new LoginResponse(token, "Bearer", jwtService.getExpirationMillis());
+        return new LoginResponse(
+                token,
+                "Bearer",
+                jwtService.getExpirationMillis(),
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getRole().name()
+        );
     }
 }

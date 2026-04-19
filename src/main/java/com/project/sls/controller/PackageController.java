@@ -10,6 +10,7 @@ import com.project.sls.entity.Package;
 import com.project.sls.repository.CourierRepository;
 import com.project.sls.repository.DeliveryRepository;
 import com.project.sls.repository.PackageRepository;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -68,7 +69,7 @@ public class PackageController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public PackageDto create(@RequestBody CreatePackageRequestDto request) {
+    public PackageDto create(@Valid @RequestBody CreatePackageRequestDto request) {
         if (request.priority() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "priority is required");
         }
