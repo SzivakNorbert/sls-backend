@@ -1,6 +1,8 @@
 package com.project.sls.dto.package_;
 
+import jakarta.validation.constraints.NotNull;
+
 public record AssignCourierRequestDto(
-        Integer packageId,
-        Integer courierId
+        @NotNull Integer packageId,
+        @NotNull Integer courierId
 ) {}

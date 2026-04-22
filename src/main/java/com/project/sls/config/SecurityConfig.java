@@ -1,6 +1,5 @@
 package com.project.sls.config;
 
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,11 +26,6 @@ public class SecurityConfig {
     @Bean
     public CorsFilter corsFilter(CorsConfigurationSource corsConfigurationSource) {
         return new CorsFilter(corsConfigurationSource);
-    }
-
-    @PostConstruct
-    public void init() {
-        System.out.println(">>> SecurityConfig loaded <<<");
     }
 
     @Bean

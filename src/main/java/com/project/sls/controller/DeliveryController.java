@@ -1,19 +1,20 @@
 package com.project.sls.controller;
 
 import com.project.sls.dto.delivery.DeliveryDto;
-import com.project.sls.entity.Package;
 import com.project.sls.dto.delivery.UpdateStatusRequestDto;
 import com.project.sls.entity.Courier;
 import com.project.sls.entity.Delivery;
+import com.project.sls.entity.User;
 import com.project.sls.repository.CourierRepository;
 import com.project.sls.repository.DeliveryRepository;
+import com.project.sls.service.LogisticsWorkflowService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -22,118 +23,98 @@ public class DeliveryController {
 
     private final DeliveryRepository deliveryRepository;
     private final CourierRepository courierRepository;
-    private final com.project.sls.repository.PackageRepository packageRepository;
+    private final LogisticsWorkflowService workflowService;
 
-    public DeliveryController(DeliveryRepository deliveryRepository, CourierRepository courierRepository, com.project.sls.repository.PackageRepository packageRepository) {
+    public DeliveryController(
+            DeliveryRepository deliveryRepository,
+            CourierRepository courierRepository,
+            LogisticsWorkflowService workflowService
+    ) {
         this.deliveryRepository = deliveryRepository;
         this.courierRepository = courierRepository;
-        this.packageRepository = packageRepository;
+        this.workflowService = workflowService;
     }
 
-    // Admin: list all deliveries
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public List<DeliveryDto> getAll() {
-        return deliveryRepository.findAll().stream().map(DeliveryController::toDto).toList();
+        return deliveryRepository.findAll().stream().map(LogisticsWorkflowService::toDeliveryDto).toList();
     }
 
-    // Admin or Courier: list deliveries for a courierId
-    // (Stricter "courier can only access own courierId" can be added later.)
     @PreAuthorize("hasAnyRole('ADMIN','COURIER')")
     @GetMapping("/courier/{courierId}")
-    public List<DeliveryDto> getByCourierId(@PathVariable Integer courierId) {
+    public List<DeliveryDto> getByCourierId(@PathVariable Integer courierId, Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof User currentUser
+                && currentUser.getRole() == User.Role.COURIER) {
+            Courier authenticatedCourier = courierRepository.findByUserId(currentUser.getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Courier profile not found"));
+
+            if (!authenticatedCourier.getId().equals(courierId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only access your own deliveries");
+            }
+        }
+
         Courier courier = courierRepository.findById(courierId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Courier not found"));
 
-        return deliveryRepository.findAllByCourier(courier).stream().map(DeliveryController::toDto).toList();
+        return deliveryRepository.findAllByCourier(courier).stream().map(LogisticsWorkflowService::toDeliveryDto).toList();
+    }
+
+    @PreAuthorize("hasRole('COURIER')")
+    @GetMapping("/my")
+    public List<DeliveryDto> getMyDeliveries(Authentication authentication) {
+        Courier courier = getAuthenticatedCourier(authentication);
+        return deliveryRepository.findAllByCourier(courier).stream().map(LogisticsWorkflowService::toDeliveryDto).toList();
     }
 
     @PreAuthorize("hasAnyRole('ADMIN','COURIER')")
     @GetMapping("/{id}")
-    public ResponseEntity<DeliveryDto> getById(@PathVariable Integer id) {
-        return deliveryRepository.findById(id)
-                .map(DeliveryController::toDto)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public DeliveryDto getById(@PathVariable Integer id, Authentication authentication) {
+        Delivery delivery = deliveryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Delivery not found"));
+        validateAccess(delivery, authentication);
+        return LogisticsWorkflowService.toDeliveryDto(delivery);
     }
 
-    // Courier/Admin can update status
     @PreAuthorize("hasAnyRole('ADMIN','COURIER')")
     @PatchMapping("/{deliveryId}/status")
-    public DeliveryDto updateStatus(@PathVariable Integer deliveryId, @RequestBody UpdateStatusRequestDto request) {
-        Delivery delivery = deliveryRepository.findById(deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Delivery not found"));
-
-        // State machine validation
-        boolean validTransition = switch (delivery.getStatus()) {
-            case ASSIGNED   -> request.newStatus() == Delivery.Status.IN_TRANSIT;
-            case IN_TRANSIT -> request.newStatus() == Delivery.Status.DELIVERED
-                    || request.newStatus() == Delivery.Status.FAILED;
-            case DELIVERED, FAILED -> false;
-        };
-        if (!validTransition) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Invalid status transition: " + delivery.getStatus() + " → " + request.newStatus());
-        }
-
-        if (request.newStatus() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "newStatus is required");
-        }
-
-        // minimal rules:
-        // - if FAILED, notes required
-        if (request.newStatus() == Delivery.Status.FAILED && (request.deliveryNotes() == null || request.deliveryNotes().isBlank())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "deliveryNotes is required for FAILED");
-        }
-
-        delivery.setStatus(request.newStatus());
-        delivery.setDeliveryNotes(request.deliveryNotes());
-
-        if (request.newStatus() == Delivery.Status.DELIVERED) {
-            delivery.setDeliveredAt(LocalDateTime.now());
-        }
-
-        // Sync Package status
-        Package pkg = delivery.getPkg();
-        if (pkg != null) {
-            switch (request.newStatus()) {
-                case IN_TRANSIT -> pkg.setStatus(Package.Status.IN_TRANSIT);
-                case DELIVERED  -> pkg.setStatus(Package.Status.DELIVERED);
-                case FAILED     -> pkg.setStatus(Package.Status.FAILED);
-                default -> {} // ASSIGNED – package already set at assign time
-            }
-            packageRepository.save(pkg);
-        }
-
-        Delivery saved = deliveryRepository.save(delivery);
-        return toDto(saved);
+    public DeliveryDto updateStatus(
+            @PathVariable Integer deliveryId,
+            @Valid @RequestBody UpdateStatusRequestDto request,
+            Authentication authentication
+    ) {
+        return workflowService.updateDeliveryStatus(deliveryId, request, getCurrentUser(authentication));
     }
 
-    private static DeliveryDto toDto(Delivery d) {
-        Integer packageId = d.getPkg() != null ? d.getPkg().getId() : null;
-        String trackingNumber = d.getPkg() != null ? d.getPkg().getTrackingNumber() : null;
-        String receiverName = d.getPkg() != null ? d.getPkg().getReceiverName() : null;
-        String address = d.getPkg() != null ? d.getPkg().getAddress() : null;
-        String city = d.getPkg() != null ? d.getPkg().getCity() : null;
+    private Courier getAuthenticatedCourier(Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        if (currentUser == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+        return courierRepository.findByUserId(currentUser.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Courier profile not found"));
+    }
 
-        Integer courierId = d.getCourier() != null ? d.getCourier().getId() : null;
-        String courierName = (d.getCourier() != null && d.getCourier().getUser() != null)
-                ? d.getCourier().getUser().getName()
+    private User getCurrentUser(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User currentUser)) {
+            return null;
+        }
+        return currentUser;
+    }
+
+    private void validateAccess(Delivery delivery, Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        if (currentUser == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+        if (currentUser.getRole() == User.Role.ADMIN) {
+            return;
+        }
+        Integer deliveryCourierUserId = delivery.getCourier() != null && delivery.getCourier().getUser() != null
+                ? delivery.getCourier().getUser().getId()
                 : null;
-
-        return new DeliveryDto(
-                d.getId(),
-                packageId,
-                trackingNumber,
-                receiverName,
-                address,
-                city,
-                courierId,
-                courierName,
-                d.getStatus(),
-                d.getDeliveryNotes(),
-                d.getAssignedAt(),
-                d.getDeliveredAt()
-        );
+        if (deliveryCourierUserId == null || !deliveryCourierUserId.equals(currentUser.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only access your own deliveries");
+        }
     }
 }
