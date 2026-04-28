@@ -5,16 +5,9 @@ import com.project.sls.dto.delivery.UpdateStatusRequestDto;
 import com.project.sls.dto.package_.AssignCourierRequestDto;
 import com.project.sls.dto.package_.CreatePackageRequestDto;
 import com.project.sls.dto.package_.PackageDto;
-import com.project.sls.entity.Courier;
-import com.project.sls.entity.Delivery;
+import com.project.sls.entity.*;
 import com.project.sls.entity.Package;
-import com.project.sls.entity.StatusHistory;
-import com.project.sls.entity.User;
-import com.project.sls.repository.CourierRepository;
-import com.project.sls.repository.DeliveryRepository;
-import com.project.sls.repository.PackageRepository;
-import com.project.sls.repository.StatusHistoryRepository;
-import com.project.sls.repository.UserRepository;
+import com.project.sls.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -23,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,19 +31,41 @@ public class LogisticsWorkflowService {
     private final DeliveryRepository deliveryRepository;
     private final StatusHistoryRepository statusHistoryRepository;
     private final UserRepository userRepository;
+    private final FirebaseLogService firebaseLogService;
 
     public LogisticsWorkflowService(
             PackageRepository packageRepository,
             CourierRepository courierRepository,
             DeliveryRepository deliveryRepository,
             StatusHistoryRepository statusHistoryRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            FirebaseLogService firebaseLogService
     ) {
         this.packageRepository = packageRepository;
         this.courierRepository = courierRepository;
         this.deliveryRepository = deliveryRepository;
         this.statusHistoryRepository = statusHistoryRepository;
         this.userRepository = userRepository;
+        this.firebaseLogService = firebaseLogService;
+    }
+
+    private void logBusinessEvent(
+            String eventType,
+            User actor,
+            Integer packageId,
+            Integer deliveryId,
+            String oldStatus,
+            String newStatus
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("eventType", eventType);
+        payload.put("actorUserId", actor != null ? actor.getId() : null);
+        payload.put("packageId", packageId);
+        payload.put("deliveryId", deliveryId);
+        payload.put("oldStatus", oldStatus);
+        payload.put("newStatus", newStatus);
+
+        firebaseLogService.write("sls_logs", payload);
     }
 
     @Transactional
@@ -70,6 +87,15 @@ public class LogisticsWorkflowService {
 
         Package saved = packageRepository.save(pkg);
         saveStatusHistory(saved, null, saved.getStatus(), requiredActor);
+
+        logBusinessEvent(
+                "PACKAGE_CREATED",
+                requiredActor,
+                saved.getId(),
+                null,
+                null,
+                saved.getStatus().name()
+        );
 
         log.info("Package created id={} tracking={} actorUserId={}",
                 saved.getId(), saved.getTrackingNumber(), requiredActor.getId());
@@ -114,6 +140,15 @@ public class LogisticsWorkflowService {
         Delivery savedDelivery = deliveryRepository.save(delivery);
         saveStatusHistory(pkg, oldPackageStatus, pkg.getStatus(), requiredActor);
 
+        logBusinessEvent(
+                "COURIER_ASSIGNED",
+                requiredActor,
+                pkg.getId(),
+                savedDelivery.getId(),
+                oldPackageStatus != null ? oldPackageStatus.name() : null,
+                pkg.getStatus().name()
+        );
+
         log.info("Courier assigned packageId={} courierId={} deliveryId={} actorUserId={}",
                 pkg.getId(), courier.getId(), savedDelivery.getId(), requiredActor.getId());
         return toDeliveryDto(savedDelivery);
@@ -153,6 +188,17 @@ public class LogisticsWorkflowService {
         }
 
         Delivery saved = deliveryRepository.save(delivery);
+
+        Package pkgAfter = saved.getPkg();
+        logBusinessEvent(
+                "DELIVERY_STATUS_UPDATED",
+                requiredActor,
+                pkgAfter != null ? pkgAfter.getId() : null,
+                saved.getId(),
+                oldPackageStatus != null ? oldPackageStatus.name() : null,
+                pkgAfter != null && pkgAfter.getStatus() != null ? pkgAfter.getStatus().name() : null
+        );
+
         log.info("Delivery status updated deliveryId={} newStatus={} actorUserId={}",
                 saved.getId(), saved.getStatus(), requiredActor.getId());
         return toDeliveryDto(saved);

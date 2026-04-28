@@ -1,0 +1,7 @@
+{
+  "users" : [ {
+    "id" : 1,
+    "name" : "Admin User",
+    "email" : "admin@sls.com",
+    "role" : "ADMIN",
+    "createdAt"

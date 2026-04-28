@@ -1,0 +1,135 @@
+{
+  "couriers" : [ {
+    "id" : 1,
+    "userId" : 2,
+    "vehicleType" : "CAR",
+    "licensePlate" : "ABC-123",
+    "phone" : "+36301234567",
+    "maxWeightKg" : 500.00,
+    "isActive" : true
+  }, {
+    "id" : 2,
+    "userId" : 3,
+    "vehicleType" : "BIKE",
+    "licensePlate" : null,
+    "phone" : "+36207654321",
+    "maxWeightKg" : 20.00,
+    "isActive" : true
+  } ],
+  "deliveries" : [ {
+    "id" : 1,
+    "packageId" : 1,
+    "courierId" : 1,
+    "status" : "ASSIGNED",
+    "assignedAt" : "2026-03-01T12:00",
+    "deliveredAt" : null,
+    "deliveryNotes" : null
+  }, {
+    "id" : 2,
+    "packageId" : 3,
+    "courierId" : 2,
+    "status" : "IN_TRANSIT",
+    "assignedAt" : "2026-03-03T10:00",
+    "deliveredAt" : null,
+    "deliveryNotes" : null
+  }, {
+    "id" : 3,
+    "packageId" : 4,
+    "courierId" : 1,
+    "status" : "DELIVERED",
+    "assignedAt" : "2026-03-04T09:00",
+    "deliveredAt" : "2026-03-04T15:30",
+    "deliveryNotes" : "Aláírva átvéve."
+  }, {
+    "id" : 4,
+    "packageId" : 5,
+    "courierId" : 2,
+    "status" : "FAILED",
+    "assignedAt" : "2026-03-05T14:30",
+    "deliveredAt" : null,
+    "deliveryNotes" : "Nem volt otthon, újra kézbesítendő."
+  }, {
+    "id" : 5,
+    "packageId" : 6,
+    "courierId" : 1,
+    "status" : "IN_TRANSIT",
+    "assignedAt" : "2026-04-27T20:16:46.416473",
+    "deliveredAt" : null,
+    "deliveryNotes" : "Viszem!"
+  } ],
+  "packages" : [ {
+    "id" : 1,
+    "trackingNumber" : "PKG001",
+    "status" : "ASSIGNED",
+    "priority" : "EXPRESS",
+    "city" : "Budapest",
+    "createdAt" : "2026-03-01T10:00",
+    "updatedAt" : "2026-04-06T17:29:12.664099",
+    "courierId" : 1
+  }, {
+    "id" : 2,
+    "trackingNumber" : "PKG002",
+    "status" : "CREATED",
+    "priority" : "NORMAL",
+    "city" : "Győr",
+    "createdAt" : "2026-03-02T11:00",
+    "updatedAt" : "2026-04-06T17:29:12.664099",
+    "courierId" : null
+  }, {
+    "id" : 3,
+    "trackingNumber" : "PKG003",
+    "status" : "IN_TRANSIT",
+    "priority" : "NORMAL",
+    "city" : "Szeged",
+    "createdAt" : "2026-03-03T09:30",
+    "updatedAt" : "2026-04-06T17:29:12.664099",
+    "courierId" : 2
+  }, {
+    "id" : 4,
+    "trackingNumber" : "PKG004",
+    "status" : "DELIVERED",
+    "priority" : "EXPRESS",
+    "city" : "Pécs",
+    "createdAt" : "2026-03-04T08:00",
+    "updatedAt" : "2026-04-06T17:29:12.664099",
+    "courierId" : 1
+  }, {
+    "id" : 5,
+    "trackingNumber" : "PKG005",
+    "status" : "FAILED",
+    "priority" : "NORMAL",
+    "city" : "Debrecen",
+    "createdAt" : "2026-03-05T14:00",
+    "updatedAt" : "2026-04-06T17:29:12.664099",
+    "courierId" : 2
+  }, {
+    "id" : 6,
+    "trackingNumber" : "PKG-60EEF6599BFA",
+    "status" : "IN_TRANSIT",
+    "priority" : "EXPRESS",
+    "city" : "Győr",
+    "createdAt" : "2026-04-27T20:15:50.007744",
+    "updatedAt" : "2026-04-27T20:17:50.476673",
+    "courierId" : 1
+  } ],
+  "users" : [ {
+    "id" : 1,
+    "name" : "Admin User",
+    "email" : "admin@sls.com",
+    "role" : "ADMIN",
+    "createdAt" : "2026-01-01T08:00"
+  }, {
+    "id" : 2,
+    "name" : "John Courier",
+    "email" : "john@sls.com",
+    "role" : "COURIER",
+    "createdAt" : "2026-01-02T09:00"
+  }, {
+    "id" : 3,
+    "name" : "Anna Courier",
+    "email" : "anna@sls.com",
+    "role" : "COURIER",
+    "createdAt" : "2026-01-03T10:00"
+  } ],
+  "generatedAt" : "2026-04-28T22:34:00.017308600"
+}

@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -67,9 +68,10 @@ public class AutomatedBackupService {
         Path targetDirectory = Path.of(backupDirectory);
         String filename = "sls-backup-" + LocalDateTime.now().format(FILE_TS) + ".json";
         Path targetPath = targetDirectory.resolve(filename);
+        Path tempPath = targetDirectory.resolve(filename + ".tmp");
 
         Map<String, Object> payload = Map.of(
-                "generatedAt", LocalDateTime.now(),
+                "generatedAt", toIsoString(LocalDateTime.now()),
                 "packages", mapPackages(packageRepository.findAll()),
                 "deliveries", mapDeliveries(deliveryRepository.findAll()),
                 "couriers", mapCouriers(courierRepository.findAll()),
@@ -78,8 +80,14 @@ public class AutomatedBackupService {
 
         try {
             Files.createDirectories(targetDirectory);
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(targetPath.toFile(), payload);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempPath.toFile(), payload);
+            Files.move(tempPath, targetPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException ex) {
+            try {
+                Files.deleteIfExists(tempPath);
+            } catch (IOException cleanupEx) {
+                log.warn("Backup temp file cleanup failed file={}", tempPath.toAbsolutePath(), cleanupEx);
+            }
             log.error("Backup creation failed target={}", targetPath.toAbsolutePath(), ex);
             throw new IllegalStateException("Failed to create backup file at " + targetPath.toAbsolutePath(), ex);
         }
@@ -100,8 +108,8 @@ public class AutomatedBackupService {
             row.put("status", pkg.getStatus().name());
             row.put("priority", pkg.getPriority().name());
             row.put("city", pkg.getCity());
-            row.put("createdAt", pkg.getCreatedAt());
-            row.put("updatedAt", pkg.getUpdatedAt());
+            row.put("createdAt", toIsoString(pkg.getCreatedAt()));
+            row.put("updatedAt", toIsoString(pkg.getUpdatedAt()));
             row.put("courierId", pkg.getCourier() != null ? pkg.getCourier().getId() : null);
             return row;
         }).toList();
@@ -114,8 +122,8 @@ public class AutomatedBackupService {
             row.put("packageId", delivery.getPkg() != null ? delivery.getPkg().getId() : null);
             row.put("courierId", delivery.getCourier() != null ? delivery.getCourier().getId() : null);
             row.put("status", delivery.getStatus().name());
-            row.put("assignedAt", delivery.getAssignedAt());
-            row.put("deliveredAt", delivery.getDeliveredAt());
+            row.put("assignedAt", toIsoString(delivery.getAssignedAt()));
+            row.put("deliveredAt", toIsoString(delivery.getDeliveredAt()));
             row.put("deliveryNotes", delivery.getDeliveryNotes());
             return row;
         }).toList();
@@ -142,8 +150,12 @@ public class AutomatedBackupService {
             row.put("name", user.getName());
             row.put("email", user.getEmail());
             row.put("role", user.getRole().name());
-            row.put("createdAt", user.getCreatedAt());
+            row.put("createdAt", toIsoString(user.getCreatedAt()));
             return row;
         }).toList();
+    }
+
+    private String toIsoString(LocalDateTime value) {
+        return value != null ? value.toString() : null;
     }
 }
